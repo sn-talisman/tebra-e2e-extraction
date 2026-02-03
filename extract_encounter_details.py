@@ -37,6 +37,18 @@ def extract_encounter_details_deterministic():
     conn = get_connection()
     cursor = conn.cursor()
     
+    import time
+    def retry_execute(query, retries=3):
+        for i in range(retries):
+            try:
+                cursor.execute(query)
+                return cursor.fetchone()
+            except Exception as e:
+                if i == retries - 1: raise e
+                logger.warning(f"Query failed ({e}), retrying {i+1}/{retries}...")
+                time.sleep(2)
+        return None
+
     enriched_data = []
 
     # 2. Iterate through each Line ID (ClaimID in DB)
@@ -111,8 +123,7 @@ def extract_encounter_details_deterministic():
             FROM PM_CLAIM
             WHERE CLAIMID = '{line_id}'
             """
-            cursor.execute(q_claim)
-            r_claim = cursor.fetchone()
+            r_claim = retry_execute(q_claim)
             
             if not r_claim:
                 logger.warning(f"  -> No PM_CLAIM match for {line_id}")
@@ -139,8 +150,7 @@ def extract_encounter_details_deterministic():
                 FROM PM_ENCOUNTERPROCEDURE
                 WHERE ENCOUNTERPROCEDUREID = '{record['DB_EncounterProcedureID']}'
                 """
-                cursor.execute(q_ep)
-                r_ep = cursor.fetchone()
+                r_ep = retry_execute(q_ep)
                 
                 if r_ep:
                     record['Enc_EncounterGUID'] = r_ep[0]
@@ -166,8 +176,7 @@ def extract_encounter_details_deterministic():
                 FROM PM_PROCEDURECODEDICTIONARY
                 WHERE PROCEDURECODEDICTIONARYID = '{record['Enc_ProcDictID']}'
                 """
-                cursor.execute(q_pd)
-                r_pd = cursor.fetchone()
+                r_pd = retry_execute(q_pd)
                 if r_pd:
                     record['Proc_Code'] = r_pd[0]
                     record['Proc_Name'] = r_pd[1]
@@ -197,8 +206,7 @@ def extract_encounter_details_deterministic():
                 LEFT JOIN PM_DOCTOR D ON E.PROVIDERGUID = D.DOCTORGUID
                 WHERE E.ENCOUNTERGUID = '{record['Enc_EncounterGUID']}'
                 """
-                cursor.execute(q_enc)
-                r_enc = cursor.fetchone()
+                r_enc = retry_execute(q_enc)
                 
                 if r_enc:
                     record['EncounterID'] = r_enc[0]
@@ -228,8 +236,7 @@ def extract_encounter_details_deterministic():
                         FROM PM_SERVICELOCATION
                         WHERE SERVICELOCATIONGUID = '{record['ServiceLocationGUID']}'
                         """
-                        cursor.execute(q_loc)
-                        r_loc = cursor.fetchone()
+                        r_loc = retry_execute(q_loc)
                         if r_loc:
                             record['FacilityName'] = r_loc[0]
                             record['FacilityAddress'] = r_loc[1]
@@ -247,8 +254,7 @@ def extract_encounter_details_deterministic():
                         FROM PM_APPOINTMENT
                         WHERE APPOINTMENTGUID = '{record['AppointmentID']}'
                         """
-                        cursor.execute(q_appt)
-                        r_appt = cursor.fetchone()
+                        r_appt = retry_execute(q_appt)
                         if r_appt:
                             record['Appt_Type'] = r_appt[0]
                             record['Appt_Reason'] = r_appt[1]
@@ -267,8 +273,7 @@ def extract_encounter_details_deterministic():
                         FROM PM_INSURANCEPOLICYAUTHORIZATION 
                         WHERE INSURANCEPOLICYAUTHORIZATIONID = '{record['InsurancePolicyAuthID']}'
                         """
-                        cursor.execute(q_auth)
-                        r_auth = cursor.fetchone()
+                        r_auth = retry_execute(q_auth)
                         if r_auth: ins_policy_guid = r_auth[0]
                     
                     # Fallback: Try via PatientCase (Primary + Active)
@@ -281,8 +286,7 @@ def extract_encounter_details_deterministic():
                         ORDER BY PRECEDENCE ASC, CREATEDDATE DESC
                         LIMIT 1
                         """
-                        cursor.execute(q_case)
-                        r_case = cursor.fetchone()
+                        r_case = retry_execute(q_case)
                         if r_case: ins_policy_guid = r_case[0]
                     
                     # If Policy Found -> Get Details (Policy -> Plan -> Company)
@@ -298,8 +302,7 @@ def extract_encounter_details_deterministic():
                         LEFT JOIN PM_INSURANCECOMPANYPLAN PL ON P.INSURANCECOMPANYPLANGUID = PL.INSURANCECOMPANYPLANGUID
                         WHERE P.INSURANCEPOLICYGUID = '{ins_policy_guid}'
                         """
-                        cursor.execute(q_pol)
-                        r_pol = cursor.fetchone()
+                        r_pol = retry_execute(q_pol)
                         if r_pol:
                             record['Insurance_PolicyNum'] = r_pol[0]
                             record['Insurance_GroupNum'] = r_pol[1]
@@ -310,10 +313,15 @@ def extract_encounter_details_deterministic():
                                 q_comp = f"""
                                 SELECT INSURANCECOMPANYNAME
                                 FROM PM_INSURANCECOMPANY
+                                FROM INSURANCECOMPANYID = '{ins_company_id}'
+                                """
+                                # Wait, wait. "FROM INSURANCECOMPANYID = ..." is wrong syntax. Fixing it in content.
+                                q_comp = f"""
+                                SELECT INSURANCECOMPANYNAME
+                                FROM PM_INSURANCECOMPANY
                                 WHERE INSURANCECOMPANYID = '{ins_company_id}'
                                 """
-                                cursor.execute(q_comp)
-                                r_comp = cursor.fetchone()
+                                r_comp = retry_execute(q_comp)
                                 if r_comp:
                                     record['Insurance_Company'] = r_comp[0]
                             

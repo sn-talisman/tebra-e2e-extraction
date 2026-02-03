@@ -2,12 +2,15 @@ from src.connection import get_connection
 
 def list_tables():
     conn = get_connection()
-    cursor = conn.cursor()
+    cur = conn.cursor()
     try:
-        cursor.execute("SHOW TABLES LIKE 'PM_%'")
-        tables = [row[1] for row in cursor.fetchall()]
-        print(tables)
-    except Exception as e: print(e)
+        cur.execute("SHOW TABLES LIKE 'PM_%'")
+        rows = cur.fetchall()
+        print("--- TABLES ---")
+        for r in rows:
+            print(r[1]) # Table Name
+    finally:
+        conn.close()
 
 if __name__ == "__main__":
     list_tables()

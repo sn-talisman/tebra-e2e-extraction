@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: tebra_postgres
+    environment:
+      POSTGRES_USER: tebra_user
+      POSTGRES_PASSWORD: tebra_password
+      POSTGRES_DB: tebra_dw
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./sql:/docker-entrypoint-initdb.d
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
