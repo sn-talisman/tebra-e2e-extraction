@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import dashboard, practices, financial, patients, financial_metrics, encounters, claims, eras
+from app.api import dashboard, practices, financial, patients, financial_metrics, encounters, claims, eras, search
 
 app = FastAPI(
     title="Talisman Healthcare Analytics",
@@ -26,6 +26,7 @@ app.include_router(financial_metrics.router, prefix="/api", tags=["Financial Met
 app.include_router(encounters.router, prefix="/api/encounters", tags=["Encounters"])
 app.include_router(claims.router, prefix="/api/claims", tags=["Claims"])
 app.include_router(eras.router, prefix="/api/eras", tags=["Electronic Remittance"])
+app.include_router(search.router, prefix="/api/search", tags=["Global Search"])
 
 @app.get("/")
 async def root():

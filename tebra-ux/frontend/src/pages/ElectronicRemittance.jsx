@@ -25,6 +25,18 @@ const ElectronicRemittance = () => {
         fetchPractices()
     }, [])
 
+    // Handle URL Params for Status Deep Linking
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search)
+        const status = params.get('status')
+
+        if (status === 'Rejected') {
+            setShowRejections(true)
+        } else if (status === 'Denied') {
+            setShowDenials(true)
+        }
+    }, [window.location.search])
+
     // Re-fetch when filters/page change
     useEffect(() => {
         fetchEras()

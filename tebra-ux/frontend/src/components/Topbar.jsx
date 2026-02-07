@@ -1,13 +1,42 @@
-import { useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 function Topbar({ title }) {
     const [dropdownOpen, setDropdownOpen] = useState(false)
     const [searchFilter, setSearchFilter] = useState('all')
     const [searchQuery, setSearchQuery] = useState('')
-    const location = useLocation()
+    const [searchResults, setSearchResults] = useState([])
+    const [showResults, setShowResults] = useState(false)
+    const [loading, setLoading] = useState(false)
+    const searchRef = useRef(null)
 
-    // Hide search on Electronic Remittance page
+    const location = useLocation()
+    const navigate = useNavigate()
+
+    // Hide search on Electronic Remittance page - Wait, requirement says "Searching for Status should open up Electronic Remittance"
+    // So we should probably allow search everywhere, but maybe the prompt meant specific context?
+    // "Please do not make any changes to other pages which is working functionality"
+    // The previous code hid search on /eras. I should probably keep it hidden if that was the design, 
+    // BUT the requirement says "Searching for Status - should open up the Electronic Remittance".
+    // If I hide the search bar on /eras, I can't search for status while on /eras? 
+    // Actually, usually global search is available everywhere. 
+    // The existing code: `const showSearch = location.pathname !== '/eras'`
+    // I will respect the existing "hide on eras" logic for now unless it blocks the flow, 
+    // but the user requirement implies using global search *to go to* ERAs.
+    // If I'm on Dashboard, I search status -> go to ERAs.
+    // UseRef to click outside to close results
+    useEffect(() => {
+        function handleClickOutside(event) {
+            if (searchRef.current && !searchRef.current.contains(event.target)) {
+                setShowResults(false)
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside)
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside)
+        }
+    }, [searchRef])
+
     const showSearch = location.pathname !== '/eras'
 
     const toggleDropdown = () => {
@@ -16,19 +45,55 @@ function Topbar({ title }) {
 
     const handleLogout = () => {
         console.log('Logout clicked')
-        // Add logout logic here
     }
 
-    const handleSearch = (e) => {
+    const handleSearch = async (e) => {
         e.preventDefault()
-        console.log('Search:', { filter: searchFilter, query: searchQuery })
-        // Add search logic here
+        if (!searchQuery.trim()) return
+
+        setLoading(true)
+        setShowResults(true)
+        try {
+            // Map frontend filter values to backend expected values
+            // Frontend: all, practice, patient, claim_number, status
+            // Backend types: practice, patient, claim, status
+            let typeParam = ''
+            if (searchFilter === 'practice') typeParam = '&type=practice'
+            if (searchFilter === 'patient') typeParam = '&type=patient'
+            if (searchFilter === 'claim_number') typeParam = '&type=claim'
+            if (searchFilter === 'status') typeParam = '&type=status'
+
+            const res = await fetch(`http://localhost:8000/api/search?q=${encodeURIComponent(searchQuery)}${typeParam}`)
+            const data = await res.json()
+            setSearchResults(data)
+        } catch (error) {
+            console.error('Search error:', error)
+            setSearchResults([])
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleResultClick = (result) => {
+        setShowResults(false)
+        setSearchQuery('')
+
+        if (result.type === 'practice') {
+            navigate(`/practices?practice=${result.id}`)
+        } else if (result.type === 'patient') {
+            navigate(`/practices?practice=${result.metadata.practice_guid}&tab=patients&patient=${result.id}`)
+        } else if (result.type === 'claim') {
+            // For claims, we use claim_ref_id for the modal
+            navigate(`/practices?practice=${result.metadata.practice_guid}&tab=claims&claimRef=${result.metadata.claim_ref_id}`)
+        } else if (result.type === 'status') {
+            navigate(`/eras?status=${result.id}`)
+        }
     }
 
     return (
         <div className="topbar">
             {/* Search Bar */}
-            <div className="topbar-search" style={{ visibility: showSearch ? 'visible' : 'hidden' }}>
+            <div className="topbar-search" style={{ visibility: showSearch ? 'visible' : 'hidden', position: 'relative' }} ref={searchRef}>
                 <form onSubmit={handleSearch} className="search-form">
                     <div className="search-filter-wrapper">
                         <select
@@ -36,11 +101,11 @@ function Topbar({ title }) {
                             value={searchFilter}
                             onChange={(e) => setSearchFilter(e.target.value)}
                         >
-                            <option value="all">All Claims</option>
-                            <option value="practice">By Practice</option>
-                            <option value="patient">By Patient</option>
-                            <option value="claim_number">By Claim #</option>
-                            <option value="status">By Status</option>
+                            <option value="all">All</option>
+                            <option value="practice">Practice</option>
+                            <option value="patient">Patient</option>
+                            <option value="claim_number">Claim #</option>
+                            <option value="status">Status</option>
                         </select>
                     </div>
                     <div className="search-input-wrapper">
@@ -50,12 +115,77 @@ function Topbar({ title }) {
                         <input
                             type="text"
                             className="search-input"
-                            placeholder={`Search ${searchFilter === 'all' ? 'claims' : searchFilter.replace('_', ' ')}...`}
+                            placeholder={`Search ${searchFilter === 'all' ? 'everything' : searchFilter.replace('_', ' ')}...`}
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
                     </div>
                 </form>
+
+                {/* Search Results Dropdown */}
+                {showResults && (
+                    <div className="search-results-dropdown" style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        backgroundColor: 'white',
+                        borderRadius: '8px',
+                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                        marginTop: '8px',
+                        zIndex: 50,
+                        maxHeight: '400px',
+                        overflowY: 'auto',
+                        border: '1px solid #e2e8f0'
+                    }}>
+                        {loading ? (
+                            <div style={{ padding: '16px', textAlign: 'center', color: '#64748b' }}>Searching...</div>
+                        ) : searchResults.length > 0 ? (
+                            searchResults.map((result) => (
+                                <div
+                                    key={`${result.type}-${result.id}`}
+                                    onClick={() => handleResultClick(result)}
+                                    style={{
+                                        padding: '12px 16px',
+                                        cursor: 'pointer',
+                                        borderBottom: '1px solid #f1f5f9',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '12px'
+                                    }}
+                                    className="search-result-item"
+                                    onMouseEnter={(e) => e.target.closest('.search-result-item').style.backgroundColor = '#f8fafc'}
+                                    onMouseLeave={(e) => e.target.closest('.search-result-item').style.backgroundColor = 'white'}
+                                >
+                                    <div style={{
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        width: '32px', height: '32px', borderRadius: '50%',
+                                        backgroundColor: result.type === 'practice' ? '#e0f2fe' :
+                                            result.type === 'patient' ? '#dcfce7' :
+                                                result.type === 'claim' ? '#ffedd5' : '#f3e8ff',
+                                        color: result.type === 'practice' ? '#0369a1' :
+                                            result.type === 'patient' ? '#15803d' :
+                                                result.type === 'claim' ? '#c2410c' : '#7e22ce',
+                                        fontSize: '14px'
+                                    }}>
+                                        {result.type === 'practice' && '🏥'}
+                                        {result.type === 'patient' && '👤'}
+                                        {result.type === 'claim' && '📄'}
+                                        {result.type === 'status' && '🏷️'}
+                                    </div>
+                                    <div>
+                                        <div style={{ fontWeight: '500', color: '#1e293b' }}>{result.label}</div>
+                                        {result.subtext && (
+                                            <div style={{ fontSize: '12px', color: '#64748b' }}>{result.subtext}</div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div style={{ padding: '16px', textAlign: 'center', color: '#64748b' }}>No results found</div>
+                        )}
+                    </div>
+                )}
             </div>
 
             <div className="topbar-actions">

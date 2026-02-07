@@ -89,7 +89,21 @@ class EraParser:
             })
             
             # --- Business Logic ---
-            if seg_id == 'N1':
+            # --- Business Logic ---
+            if seg_id == 'BPR':
+                 parsed_data['payment'] = {
+                     'total_paid': self.get_element(segment, 'BPR02'),
+                     'method': self.get_element(segment, 'BPR04'),
+                     'format': self.get_element(segment, 'BPR05')
+                 }
+                 
+            elif seg_id == 'TRN':
+                 trace_type = self.get_element(segment, 'TRN01')
+                 if trace_type == '1': # Current Transaction Trace Numbers
+                     parsed_data['payment']['check_number'] = self.get_element(segment, 'TRN02')
+                     parsed_data['payment']['origin_company'] = self.get_element(segment, 'TRN03')
+                     
+            elif seg_id == 'N1':
                 entity_id = self.get_element(segment, 'N101')
                 if entity_id == 'PR':
                     current_loop_type = 'PAYER'
@@ -173,8 +187,15 @@ class EraParser:
                  date_val = self.get_element(segment, 'DTM02')
                  if code == '472' and current_svc:
                      current_svc['date'] = date_val
-                 elif code == '405' and current_loop_type == 'PAYER':
-                     parsed_data['payer']['effective_date'] = date_val
+                 elif code == '405':
+                     # Production Date (Header) or Effective Date
+                     if current_loop_type == 'PAYER':
+                         parsed_data['payer']['effective_date'] = date_val
+                     elif current_loop_type is None: # Header DTM
+                         parsed_data['payment']['date'] = date_val
+                 elif code == '150' or code == '151':
+                     # Check or Service Period Start/End
+                     pass
 
             elif seg_id == 'CAS':
                  group = self.get_element(segment, 'CAS01')

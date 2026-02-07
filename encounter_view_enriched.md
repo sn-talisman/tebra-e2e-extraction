@@ -1,54 +1,34 @@
-# Encounter 360 View: 388650
-**Generated from Postgres Database**
+# 360-Degree Encounter View (Generated from Live DB)
 
-## 1. Context
-- **Encounter GUID**: `71242908-70a8-4e5d-9f38-d0e798f9c1f1`
-- **Date**: 2025-10-08
-- **Status**: Approved
-- **Type**: None
-- **Reason**: None
-- **Location**: KEYS2WELLNESS LLC
-- **Address**: `{'city': 'LAUREL', 'state': 'MS', 'address': '216 S 13TH AVE # C'}`
-- **Place of Service**: Office
-## 2. Entities
-### Patient
-- **Name**: **KATHARINE PETTY**
-- **Case ID**: `106818`
-- **Tebra ID**: `113520`
-- **Patient GUID**: `033e412f-5d02-4884-a4be-3445baf51878`
-- **DOB**: 1986-12-08 (F)
-- **Address**: 123 W SECOND AVE, PETAL, MS 394652401
+## 1. Financial Bundle (ERA)
+*   **Claim Reference ID**: `387414Z43267`
+*   **Payer**: NC BCBS
+*   **Total Paid**: $19.80
+*   **Patient Resp**: $0.00
+*   **ERA Report ID**: `280404`
 
-### Provider
-- **Name**: FELICIA KEYS
-- **NPI**: `1497187512`
-- **Referring Provider**: FELICIA KEYS (NPI: `1497187512`)
+## 2. Clinical Context
+*   **Encounter Date**: 2025-12-01
+*   **Reason**: None
+*   **Notes**: None
+*   **Subject**: None
+*   **Location**: 2e95cc85-2c11-6c6b-e063-98341e0ac8e2
 
-### Payer (Insurance)
-- **Company**: Medicare of Mississippi
-- **Plan**: Medicare of Mississippi
-- **Policy #**: `7V42XG3RX91`
-- **Group #**: ``
+## 3. Patient Demographics & Insurance
+*   **Name**: **JON MILLER**
+*   **DOB**: 1959-09-12
+*   **Gender**: M
+*   **Address**: 416 PETTY ROAD, SANFORD, NC 273308208
+*   **Policy Key**: `7fb9a5432bf93b0001ec1992bca387a2`
 
-## 3. Clinical Data
-### Diagnoses
-- **713793** - Major depressive disorder, recurrent severe without psychotic features (Precedence: 5)
-- **713794** - Generalized anxiety disorder (Precedence: 6)
-- **713795** - Personal history of other mental and behavioral disorders (Precedence: 7)
-- **713796** - Problems of adjustment to life-cycle transitions (Precedence: 8)
+## 4. Diagnosis Codes (ICD-10)
+| Seq | Code | Description |
+| :--- | :--- | :--- |
+| 5 | **711946** | Aftercare following joint replacement surgery |
 
-## 4. Financials (Lines)
-| Date | Proc | Description | Billed | Paid (Line) | Units | Status | IDs (ERA/Track) | Adjustments |
-|---|---|---|---|---|---|---|---|---|
-| 2025-10-08 | `HC:99215:25` | OFFICE OR OTHER OUTPATIENT VISIT FOR THE EVALUATION AND MANAGEMENT OF AN ESTABLISHED PATIENT, WHICH REQUIRES A MEDICALLY APPROPRIATE HISTORY AND/OR EXAMINATION AND HIGH LEVEL OF MEDICAL DECISION MAKING. WHEN USING TOTAL TIME ON THE DATE OF THE ENCOUNTER, 40 MINUTES MUST BE MET OR EXCEEDED. | $208.47 | $0.00 | 0 | Pending<br>(Paid) | `388650Z43267`<br>Track: `2601231808257` | `{'OA-22': 208.47}`<br>_OA-22: Payment adjusted because this care may be covered by another payer per coordination of benefits._ |
-| 2025-10-08 | `HC:99417` | Prolonged office or other outpatient evaluation and management service(s) beyond the maximum required time of the primary procedure which has been selected using total time on the date of the primary service; each addl 15 mins by the physician or QHCP, with or without direct patient contact | $50.00 | $0.00 | 0 | Pending<br>(Paid) | `388650Z43267`<br>Track: `2601231808257` | `{'CO-96': 50.0}`<br>_CO-96: Non-covered charge(s). This change to be effective 4/1/2007: At least one Remark Code must be provided (may be comprised of either the Remittance Advice Remark Code or NCPDP Reject Reason Code.)_ |
-| 2025-10-08 | `HC:96127` | Assessment of emotional or behavioral problems | $100.00 | $0.00 | 0 | Pending<br>(Paid) | `388650Z43267`<br>Track: `2601231808257` | `{'OA-22': 100.0}`<br>_OA-22: Payment adjusted because this care may be covered by another payer per coordination of benefits._ |
-| 2025-10-08 | `HC:99401` | Preventive medicine counseling, typically 15 minutes | $59.24 | $0.00 | 0 | Pending<br>(Paid) | `388650Z43267`<br>Track: `2601231808257` | `{'PR-96': 59.24}`<br>_PR-96: Non-covered charge(s). This change to be effective 4/1/2007: At least one Remark Code must be provided (may be comprised of either the Remittance Advice Remark Code or NCPDP Reject Reason Code.)_ |
-| 2025-10-08 | `HC:G2083` | Visit esketamine, > 56m | $1093.68 | $0.00 | 0 | Pending<br>(Paid) | `388650Z43267`<br>Track: `2601231808257` | `{'OA-22': 1093.68}`<br>_OA-22: Payment adjusted because this care may be covered by another payer per coordination of benefits._ |
-
-**Totals**: Billed: **$1511.39** | Line Paid: **$0.00**
-
-## 5. ERA Payment Bundles (Parent Checks)
-| Claim Ref ID | Payer Name | Total Check Paid | Patient Resp |
-|---|---|---|---|
-| `388650Z43267` | MS MEDICARE | $0.00 | $59.24 |
+## 5. Financial Service Lines (Procedures)
+| Proc | Date | Billed | Paid | Adjustments | Status |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **HC:97110:KX:GP** | 2025-12-01 | $112.00 | $33.26 | `"{\"CO-45\": 56.7, \"PR-2\": 8.48}"` | Completed |
+| **HC:97112:KX:GP** | 2025-12-01 | $56.00 | $18.48 | `"{\"CO-45\": 25.23, \"PR-2\": 4.72}"` | Completed |
+| **HC:97530:KX:GP** | 2025-12-01 | $54.00 | $25.89 | `"{\"CO-45\": 20.98, \"PR-2\": 6.6}"` | Completed |

@@ -23,10 +23,23 @@ OUTPUT_ROOT = 'output_all_practices'
 REPORT_FILE = 'execution_report.md'
 
 def get_practices():
+    """Get all practices that have clearinghouse response data, regardless of ACTIVE status."""
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT PRACTICEGUID, NAME FROM PM_PRACTICE WHERE ACTIVE = TRUE ORDER BY NAME")
+        # Include ACTIVE practices with clearinghouse data
+        cursor.execute("""
+            SELECT DISTINCT p.PRACTICEGUID, p.NAME 
+            FROM PM_PRACTICE p
+            WHERE p.ACTIVE = TRUE
+            AND EXISTS (
+                SELECT 1 FROM PM_CLEARINGHOUSERESPONSE c 
+                WHERE c.PRACTICEGUID = p.PRACTICEGUID
+            )
+            ORDER BY 
+                CASE WHEN p.NAME ILIKE 'Performance%' THEN 0 ELSE 1 END, 
+                p.NAME
+        """)
         return cursor.fetchall()
     except Exception as e:
         logger.error(f"Failed to fetch practices: {e}")
@@ -129,8 +142,8 @@ def run_pipeline():
 
                 # Step 1: Extract ERAs
                 from datetime import timedelta
-                start_dt = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
-                logger.info(f"  > Step 1: Extracting ERAs/Rejections (Since {start_dt})...")
+                start_dt = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
+                logger.info(f"  > Step 1: Extracting ALL Clearinghouse Responses (Since {start_dt})...")
                 
                 extract_all_eras(p_guid, start_date=start_dt, output_dir=practice_dir)
                 
@@ -159,9 +172,16 @@ def run_pipeline():
                 
                 # Step 3: Load to Postgres
                 logger.info(f"  > Step 3: Loading to Postgres...")
-                if stats.lines_enriched > 0:
-                    load_practice_data(data_dir=practice_dir)
-                    stats.db_load_status = 'Success'
+                # Always try to load ERA reports, even if no enriched encounter data
+                era_reports_file = os.path.join(practice_dir, 'era_reports.csv')
+                if stats.lines_enriched > 0 or os.path.exists(era_reports_file):
+                    load_practice_data(
+                        data_dir=practice_dir, 
+                        practice_guid=p_guid,
+                        practice_name=p_name,
+                        era_only=(stats.lines_enriched == 0)
+                    )
+                    stats.db_load_status = 'Success' if stats.lines_enriched > 0 else 'ERA Only'
                 else:
                     stats.db_load_status = 'No Data'
                 

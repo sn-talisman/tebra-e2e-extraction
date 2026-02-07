@@ -47,6 +47,31 @@ function Practices() {
         fetchPractices()
     }, [])
 
+    // Handle URL Params for Deep Linking
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search)
+        const practiceGuid = params.get('practice')
+        const tab = params.get('tab')
+        const patientGuid = params.get('patient')
+        const claimRef = params.get('claimRef')
+
+        if (practices.length > 0 && practiceGuid) {
+            const practice = practices.find(p => p.locationGuid === practiceGuid || p.practiceGuid === practiceGuid)
+            if (practice) {
+                setSelectedPractice(practice)
+                if (tab) setActiveTab(tab)
+
+                // Open Modals if params exist
+                if (patientGuid) {
+                    handleViewPatientDetails(patientGuid)
+                }
+                if (claimRef) {
+                    handleViewClaim(claimRef)
+                }
+            }
+        }
+    }, [practices, window.location.search]) // Re-run when practices load or URL changes
+
     useEffect(() => {
         if (selectedPractice) {
             fetchTabData()
@@ -270,26 +295,29 @@ function Practices() {
                                         </thead>
                                         <tbody>
                                             {patients.length > 0 ? (
-                                                patients.slice((patientsPage - 1) * ITEMS_PER_PAGE, patientsPage * ITEMS_PER_PAGE).map((patient, idx) => (
-                                                    <tr key={idx}>
-                                                        <td>{patient.name}</td>
-                                                        <td>{patient.patientId}</td>
-                                                        <td>{patient.encounterCount}</td>
-                                                        <td>{patient.lastVisit}</td>
-                                                        <td style={{ textAlign: 'center' }}>
-                                                            <button
-                                                                className="icon-button"
-                                                                onClick={() => handleViewPatientDetails(patient.patientGuid)}
-                                                                title="View Details"
-                                                            >
-                                                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                                                </svg>
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                ))
+                                                patients
+                                                    .filter(p => !selectedPatientGuid || p.patientGuid === selectedPatientGuid)
+                                                    .slice((patientsPage - 1) * ITEMS_PER_PAGE, patientsPage * ITEMS_PER_PAGE)
+                                                    .map((patient, idx) => (
+                                                        <tr key={idx} style={{ backgroundColor: selectedPatientGuid === patient.patientGuid ? '#f0fdf4' : 'inherit' }}>
+                                                            <td>{patient.name}</td>
+                                                            <td>{patient.patientId}</td>
+                                                            <td>{patient.encounterCount}</td>
+                                                            <td>{patient.lastVisit}</td>
+                                                            <td style={{ textAlign: 'center' }}>
+                                                                <button
+                                                                    className="icon-button"
+                                                                    onClick={() => handleViewPatientDetails(patient.patientGuid)}
+                                                                    title="View Details"
+                                                                >
+                                                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                                    </svg>
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))
                                             ) : (
                                                 <tr>
                                                     <td colSpan="5" style={{ textAlign: 'center', padding: '40px' }}>
@@ -301,7 +329,7 @@ function Practices() {
                                     </table>
                                     <PaginationControls
                                         currentPage={patientsPage}
-                                        totalItems={patients.length}
+                                        totalItems={selectedPatientGuid ? 1 : patients.length}
                                         itemsPerPage={ITEMS_PER_PAGE}
                                         onPageChange={setPatientsPage}
                                     />
@@ -400,40 +428,43 @@ function Practices() {
                                         </thead>
                                         <tbody>
                                             {claims.length > 0 ? (
-                                                claims.slice((claimsPage - 1) * ITEMS_PER_PAGE, claimsPage * ITEMS_PER_PAGE).map((claim, idx) => (
-                                                    <tr key={idx}>
-                                                        <td>{claim.claimId}</td>
-                                                        <td>{claim.date}</td>
-                                                        <td>{claim.patientName}</td>
-                                                        <td>${claim.billed.toFixed(2)}</td>
-                                                        <td>${claim.paid.toFixed(2)}</td>
-                                                        <td>
-                                                            <span className={`status-badge ${claim.status === 'Paid' ? 'paid' :
-                                                                claim.status === 'Denied' || claim.status === 'Rejected' ? 'denied' :
-                                                                    'pending'
-                                                                }`}>
-                                                                {claim.status}
-                                                            </span>
-                                                        </td>
-                                                        <td style={{ textAlign: 'center' }}>
-                                                            {claim.claimReferenceId && (
-                                                                <button
-                                                                    className="icon-button"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleViewClaim(claim.claimReferenceId);
-                                                                    }}
-                                                                    title="View Details"
-                                                                >
-                                                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18">
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                                                    </svg>
-                                                                </button>
-                                                            )}
-                                                        </td>
-                                                    </tr>
-                                                ))
+                                                claims
+                                                    .filter(c => !selectedClaimRefId || c.claimReferenceId === selectedClaimRefId)
+                                                    .slice((claimsPage - 1) * ITEMS_PER_PAGE, claimsPage * ITEMS_PER_PAGE)
+                                                    .map((claim, idx) => (
+                                                        <tr key={idx} style={{ backgroundColor: selectedClaimRefId === claim.claimReferenceId ? '#fff7ed' : 'inherit' }}>
+                                                            <td>{claim.claimId}</td>
+                                                            <td>{claim.date}</td>
+                                                            <td>{claim.patientName}</td>
+                                                            <td>${claim.billed.toFixed(2)}</td>
+                                                            <td>${claim.paid.toFixed(2)}</td>
+                                                            <td>
+                                                                <span className={`status-badge ${claim.status === 'Paid' ? 'paid' :
+                                                                    claim.status === 'Denied' || claim.status === 'Rejected' ? 'denied' :
+                                                                        'pending'
+                                                                    }`}>
+                                                                    {claim.status}
+                                                                </span>
+                                                            </td>
+                                                            <td style={{ textAlign: 'center' }}>
+                                                                {claim.claimReferenceId && (
+                                                                    <button
+                                                                        className="icon-button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleViewClaim(claim.claimReferenceId);
+                                                                        }}
+                                                                        title="View Details"
+                                                                    >
+                                                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                                        </svg>
+                                                                    </button>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    ))
                                             ) : (
                                                 <tr>
                                                     <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: 'var(--slate-500)' }}>
@@ -445,7 +476,7 @@ function Practices() {
                                     </table>
                                     <PaginationControls
                                         currentPage={claimsPage}
-                                        totalItems={claims.length}
+                                        totalItems={selectedClaimRefId ? 1 : claims.length}
                                         itemsPerPage={ITEMS_PER_PAGE}
                                         onPageChange={setClaimsPage}
                                     />
@@ -713,19 +744,25 @@ function Practices() {
             {/* Modals */}
             <PatientDetailsModal
                 isOpen={showPatientModal}
-                onClose={() => setShowPatientModal(false)}
+                onClose={closePatientModal}
                 patientGuid={selectedPatientGuid}
             />
 
             <EncounterDetailsModal
                 isOpen={showEncounterModal}
-                onClose={() => setShowEncounterModal(false)}
+                onClose={() => {
+                    setShowEncounterModal(false)
+                    setSelectedEncounterId(null)
+                }}
                 encounterId={selectedEncounterId}
             />
 
             <ClaimDetailsModal
                 isOpen={showClaimModal}
-                onClose={() => setShowClaimModal(false)}
+                onClose={() => {
+                    setShowClaimModal(false)
+                    setSelectedClaimRefId(null)
+                }}
                 claimRefId={selectedClaimRefId}
             />
         </div>
