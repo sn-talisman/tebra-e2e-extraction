@@ -11,60 +11,88 @@ async def get_practices_root():
 @router.get("/list")
 async def get_practices():
     with get_db_cursor() as cur:
-        # We use a CTE to try two methods of linking practice to location:
-        # 1. Via ERA -> Bundle -> Claim -> Location (most accurate but sparse)
-        # 2. Via Name Match (fallback, covers ~40% of cases)
+        # STEP 1: Get all base practices
+        cur.execute("SELECT practice_guid, name FROM tebra.cmn_practice")
+        # Initialize dictionary with default values
+        practices = {}
+        for row in cur.fetchall():
+            guid = str(row[0]).lower()
+            practices[guid] = {
+                "locationGuid": str(row[0]), # Keep original casing for ID
+                "name": row[1],
+                "city": "N/A",
+                "state": "N/A",
+                "eraCount": 0,
+                "encounterCount": 0
+            }
+
+        # STEP 2: Get ERA Counts & Location Metadata (The "ERA Chain")
+        # This provides the most accurate link for practices that have ERAs
         cur.execute("""
-            WITH PracticeMetadata AS (
+            WITH EraStats AS (
                 SELECT 
-                    p.practice_guid,
-                    p.name,
-                    -- Prioritize ERA-linked location, fall back to name-matched location
-                    COALESCE(l_era.address_block->>'city', l_name.address_block->>'city', 'N/A') as city,
-                    COALESCE(l_era.address_block->>'state', l_name.address_block->>'state', 'N/A') as state,
-                    -- Count ERAs directly linked to the practice
+                    LOWER(r.practice_guid) as practice_guid,
                     COUNT(DISTINCT r.era_report_id) as era_count,
-                    -- Rank them to pick the best metadata if multiple locations found
-                    ROW_NUMBER() OVER (PARTITION BY p.practice_guid ORDER BY COUNT(DISTINCT r.era_report_id) DESC) as rn
-                FROM tebra.cmn_practice p
-                
-                -- Path 1: ERA Chain
-                LEFT JOIN tebra.fin_era_report r ON p.practice_guid::text = LOWER(r.practice_guid)
+                    COALESCE(MAX(l.address_block->>'city'), 'N/A') as city,
+                    COALESCE(MAX(l.address_block->>'state'), 'N/A') as state
+                FROM tebra.fin_era_report r
                 LEFT JOIN tebra.fin_era_bundle b ON r.era_report_id = b.era_report_id
                 LEFT JOIN tebra.fin_claim_line cl ON b.claim_reference_id = cl.claim_reference_id
-                LEFT JOIN tebra.cmn_location l_era ON cl.practice_guid = l_era.location_guid
-                
-                -- Path 2: Name Match Fallback
-                LEFT JOIN tebra.cmn_location l_name ON p.name = l_name.name
-                
-                GROUP BY p.practice_guid, p.name, l_era.address_block, l_name.address_block
+                LEFT JOIN tebra.cmn_location l ON cl.practice_guid = l.location_guid
+                GROUP BY LOWER(r.practice_guid)
             )
-            SELECT 
-                practice_guid,
-                name,
-                city,
-                state,
-                era_count
-            FROM PracticeMetadata
-            ORDER BY era_count DESC, name ASC
+            SELECT practice_guid, era_count, city, state FROM EraStats
         """)
         
-        rows = cur.fetchall()
-        return [
-            {
-                "locationGuid": str(row[0]),
-                "name": row[1],
-                "city": row[2],
-                "state": row[3],
-                "eraCount": row[4]
-            }
-            for row in rows
-        ]
+        for row in cur.fetchall():
+            guid, count, city, state = row
+            if guid in practices:
+                practices[guid]['eraCount'] = count
+                if city != 'N/A': practices[guid]['city'] = city
+                if state != 'N/A': practices[guid]['state'] = state
+
+        # STEP 3: Get Encounter Counts via Name Matching (Fallback/Complementary)
+        # This captures encounter volume for practices even if they don't have ERAs loaded yet
+        cur.execute("""
+            SELECT 
+                LOWER(p.practice_guid::text),
+                COUNT(e.encounter_id)
+            FROM tebra.cmn_practice p
+            JOIN tebra.cmn_location l ON p.name = l.name
+            JOIN tebra.clin_encounter e ON l.location_guid = e.location_guid
+            GROUP BY p.practice_guid
+        """)
+        
+        for row in cur.fetchall():
+            guid, count = row
+            if guid in practices:
+                practices[guid]['encounterCount'] = count
+
+        # Convert back to list and sort
+        result_list = list(practices.values())
+        # Sort by eraCount DESC, then name ASC
+        result_list.sort(key=lambda x: (-x['eraCount'], x['name']))
+        
+        return result_list
 
 @router.get("/{location_guid}/patients")
 async def get_practice_patients(location_guid: str):
-    """Get patients for a specific practice"""
+    """Get patients for a specific practice (resolving practice_guid to location_guids)"""
     with get_db_cursor() as cur:
+        # Resolve practice_guid to location_guids via Name Match (which is how we link them)
+        cur.execute("""
+            SELECT l.location_guid 
+            FROM tebra.cmn_practice p
+            JOIN tebra.cmn_location l ON p.name = l.name
+            WHERE p.practice_guid::text = %s
+        """, (location_guid,))
+        
+        loc_guids = [str(row[0]) for row in cur.fetchall()]
+        
+        if not loc_guids:
+            return []
+
+        # Use the resolved location GUIDs to fetch data
         cur.execute("""
             SELECT DISTINCT
                 p.patient_guid,
@@ -74,10 +102,11 @@ async def get_practice_patients(location_guid: str):
                 MAX(e.start_date) as last_visit
             FROM tebra.cmn_patient p
             INNER JOIN tebra.clin_encounter e ON p.patient_guid = e.patient_guid
-            WHERE e.location_guid = %s
+            WHERE e.location_guid = ANY(%s::uuid[])
             GROUP BY p.patient_guid, p.full_name, p.patient_id
             ORDER BY last_visit DESC
-        """, (location_guid,))
+            LIMIT 500
+        """, (loc_guids,))
         
         rows = cur.fetchall()
         return [
@@ -95,6 +124,19 @@ async def get_practice_patients(location_guid: str):
 async def get_practice_encounters(location_guid: str):
     """Get encounters for a specific practice"""
     with get_db_cursor() as cur:
+        # Resolve practice_guid to location_guids
+        cur.execute("""
+            SELECT l.location_guid 
+            FROM tebra.cmn_practice p
+            JOIN tebra.cmn_location l ON p.name = l.name
+            WHERE p.practice_guid::text = %s
+        """, (location_guid,))
+        
+        loc_guids = [str(row[0]) for row in cur.fetchall()]
+        
+        if not loc_guids:
+            return []
+
         cur.execute("""
             SELECT 
                 e.encounter_id,
@@ -106,9 +148,10 @@ async def get_practice_encounters(location_guid: str):
             FROM tebra.clin_encounter e
             INNER JOIN tebra.cmn_patient p ON e.patient_guid = p.patient_guid
             LEFT JOIN tebra.cmn_provider pr ON e.provider_guid = pr.provider_guid
-            WHERE e.location_guid = %s
+            WHERE e.location_guid = ANY(%s::uuid[])
             ORDER BY e.start_date DESC
-        """, (location_guid,))
+            LIMIT 500
+        """, (loc_guids,))
         
         rows = cur.fetchall()
         return [
@@ -124,10 +167,24 @@ async def get_practice_encounters(location_guid: str):
         ]
 
 @router.get("/{location_guid}/claims")
-async def get_practice_claims(location_guid: str):
-    """Get claims for a specific practice"""
+async def get_practice_claims(location_guid: str, paid_only: bool = False):
+    """Get claims for a specific practice, optionally filtering by paid status"""
     with get_db_cursor() as cur:
+        # Resolve practice_guid to location_guids
         cur.execute("""
+            SELECT l.location_guid 
+            FROM tebra.cmn_practice p
+            JOIN tebra.cmn_location l ON p.name = l.name
+            WHERE p.practice_guid::text = %s
+        """, (location_guid,))
+        
+        loc_guids = [str(row[0]) for row in cur.fetchall()]
+        
+        if not loc_guids:
+            return []
+
+        # Base query
+        query = """
             SELECT 
                 cl.tebra_claim_id,
                 cl.date_of_service,
@@ -147,10 +204,19 @@ async def get_practice_claims(location_guid: str):
             FROM tebra.fin_claim_line cl
             LEFT JOIN tebra.clin_encounter e ON cl.encounter_id = e.encounter_id
             LEFT JOIN tebra.cmn_patient p ON e.patient_guid = p.patient_guid
-            WHERE cl.practice_guid = %s
-            ORDER BY cl.date_of_service DESC
-            LIMIT 500
-        """, (location_guid,))
+            WHERE cl.practice_guid = ANY(%s::uuid[])
+        """
+        
+        params = [loc_guids]
+        
+        # Add filter if requested
+        if paid_only:
+            query += " AND cl.paid_amount > 0"
+            
+        # Add order and limit
+        query += " ORDER BY cl.date_of_service DESC LIMIT 500"
+
+        cur.execute(query, tuple(params))
         
         rows = cur.fetchall()
         return [
