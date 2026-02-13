@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import dashboard, practices, financial, patients, financial_metrics, encounters, claims, eras, search
+from app.api import dashboard, practices, financial, patients, financial_metrics, encounters, claims, eras, search, analytics, reports
 
 app = FastAPI(
     title="Talisman Healthcare Analytics",
@@ -11,7 +11,7 @@ app = FastAPI(
 # CORS Configuration for local development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174"],  # Vite dev server (both ports)
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://192.168.4.45:5173"],  # Vite dev server (local & LAN)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -27,6 +27,8 @@ app.include_router(encounters.router, prefix="/api/encounters", tags=["Encounter
 app.include_router(claims.router, prefix="/api/claims", tags=["Claims"])
 app.include_router(eras.router, prefix="/api/eras", tags=["Electronic Remittance"])
 app.include_router(search.router, prefix="/api/search", tags=["Global Search"])
+app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["Analytics"])
+app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
 
 @app.get("/")
 async def root():

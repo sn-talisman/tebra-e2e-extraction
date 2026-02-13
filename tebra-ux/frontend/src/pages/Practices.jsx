@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { API_BASE_URL } from '../config'
 import Topbar from '../components/Topbar'
 import Sidebar from '../components/Sidebar'
 import PatientDetailsModal from '../components/PatientDetailsModal'
@@ -80,7 +81,7 @@ function Practices() {
 
     const fetchPractices = async () => {
         try {
-            const response = await fetch('/api/practices/list')
+            const response = await fetch(`${API_BASE_URL}/api/practices/list`)
             const data = await response.json()
             setPractices(data)
             setLoading(false)
@@ -96,17 +97,17 @@ function Practices() {
         try {
             if (activeTab === 'patients') {
                 const guid = selectedPractice.practiceGuid || selectedPractice.locationGuid
-                const response = await fetch(`/api/practices/${guid}/patients`)
+                const response = await fetch(`${API_BASE_URL}/api/practices/${guid}/patients`)
                 const data = await response.json()
                 setPatients(data)
             } else if (activeTab === 'encounters') {
                 const guid = selectedPractice.practiceGuid || selectedPractice.locationGuid
-                const response = await fetch(`/api/practices/${guid}/encounters`)
+                const response = await fetch(`${API_BASE_URL}/api/practices/${guid}/encounters`)
                 const data = await response.json()
                 setEncounters(data)
             } else if (activeTab === 'claims') {
                 const guid = selectedPractice.practiceGuid || selectedPractice.locationGuid
-                const url = `/api/practices/${guid}/claims${showPaidOnly ? '?paid_only=true' : ''}`
+                const url = `${API_BASE_URL}/api/practices/${guid}/claims${showPaidOnly ? '?paid_only=true' : ''}`
                 const response = await fetch(url)
                 const data = await response.json()
                 setClaims(data)
@@ -151,7 +152,7 @@ function Practices() {
     const fetchFinancialMetrics = async (practiceGuid) => {
         setLoadingMetrics(true)
         try {
-            const response = await fetch(`http://localhost:8000/api/practices/${practiceGuid}/financial-metrics`)
+            const response = await fetch(`${API_BASE_URL}/api/practices/${practiceGuid}/financial-metrics`)
             const data = await response.json()
             setFinancialMetrics(data)
         } catch (error) {

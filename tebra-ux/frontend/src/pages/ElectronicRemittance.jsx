@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { API_BASE_URL } from '../config'
 import ERADetailsModal from '../components/ERADetailsModal'
 
 const ElectronicRemittance = () => {
@@ -44,7 +45,7 @@ const ElectronicRemittance = () => {
 
     const fetchPractices = async () => {
         try {
-            const res = await fetch('http://localhost:8000/api/practices/list')
+            const res = await fetch(`${API_BASE_URL}/api/practices/list`)
             const data = await res.json()
             setPractices(data)
             // Default to first practice if list not empty, or keep 'All' logic if preferred
@@ -62,7 +63,7 @@ const ElectronicRemittance = () => {
     const fetchEras = async () => {
         setLoading(true)
         try {
-            let url = `http://localhost:8000/api/eras/list?page=${page}&page_size=20&sort_by=${sortConfig.key}&order=${sortConfig.direction}&`
+            let url = `${API_BASE_URL}/api/eras/list?page=${page}&page_size=20&sort_by=${sortConfig.key}&order=${sortConfig.direction}&`
 
             if (selectedPractice) {
                 // The backend expects GUID for 'All' check or specific GUID

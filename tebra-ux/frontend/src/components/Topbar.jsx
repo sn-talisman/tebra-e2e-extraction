@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { API_BASE_URL } from '../config'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 function Topbar({ title }) {
@@ -63,7 +64,7 @@ function Topbar({ title }) {
             if (searchFilter === 'claim_number') typeParam = '&type=claim'
             if (searchFilter === 'status') typeParam = '&type=status'
 
-            const res = await fetch(`http://localhost:8000/api/search?q=${encodeURIComponent(searchQuery)}${typeParam}`)
+            const res = await fetch(`${API_BASE_URL}/api/search?q=${encodeURIComponent(searchQuery)}${typeParam}`)
             const data = await res.json()
             setSearchResults(data)
         } catch (error) {

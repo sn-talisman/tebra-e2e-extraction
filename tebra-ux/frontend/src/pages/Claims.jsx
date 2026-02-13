@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { API_BASE_URL } from '../config'
 import PaginationControls from '../components/PaginationControls'
 
 function Claims() {
@@ -27,7 +28,7 @@ function Claims() {
                 queryParams.append('search', searchTerm)
             }
 
-            const response = await fetch(`http://localhost:8000/api/claims/list?${queryParams}`)
+            const response = await fetch(`${API_BASE_URL}/api/claims/list?${queryParams}`)
             const data = await response.json()
             setClaims(data)
         } catch (error) {
@@ -117,8 +118,8 @@ function Claims() {
                                         <td>${claim.billed.toFixed(2)}</td>
                                         <td>
                                             <span className={`status-badge ${claim.status === 'Paid' ? 'paid' :
-                                                    claim.status === 'Denied' || claim.status === 'Rejected' ? 'denied' :
-                                                        'pending'
+                                                claim.status === 'Denied' || claim.status === 'Rejected' ? 'denied' :
+                                                    'pending'
                                                 }`}>
                                                 {claim.status}
                                             </span>
