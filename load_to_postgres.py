@@ -344,17 +344,27 @@ def load_practice_data(data_dir='.', practice_guid=None, practice_name=None, era
                 # Entities
                 pat_guid = row.get('DB_PatientGUID')
                 if pat_guid and pat_guid not in seen_pat:
-                    # Added Patient Mapping
+                    # Added Patient Mapping (with new FK columns)
                     batch_pat.append((
                         pat_guid, clean_str(row.get('PatientID')), clean_str(row.get('PatientName')), clean_str(row.get('PatientCaseID')),
                         clean_date(row.get('PatientDOB')), clean_str(row.get('PatientGender')),
-                        clean_str(row.get('PatientAddress')), clean_str(row.get('PatientCity')), clean_str(row.get('PatientState')), clean_str(row.get('PatientZip'))
+                        clean_str(row.get('PatientAddress')), clean_str(row.get('PatientCity')), clean_str(row.get('PatientState')), clean_str(row.get('PatientZip')),
+                        clean_id(row.get('Patient_PracticeGUID')),
+                        clean_id(row.get('Patient_PrimaryProvGUID')),
+                        clean_id(row.get('Patient_DefaultLocGUID')),
+                        clean_id(row.get('Patient_ReferringProvGUID')),
+                        True if row.get('Patient_Active') in (True, 'True', 'true', '1', 1) else (False if row.get('Patient_Active') in (False, 'False', 'false', '0', 0) else None)
                     )) 
                     seen_pat.add(pat_guid)
                 
                 prov_guid = row.get('ProviderGUID')
                 if prov_guid and prov_guid not in seen_prov:
-                    batch_prov.append((prov_guid, clean_str(row.get('ProviderNPI')), clean_str(row.get('ProviderName'))))
+                    batch_prov.append((
+                        prov_guid, clean_str(row.get('ProviderNPI')), clean_str(row.get('ProviderName')),
+                        clean_id(row.get('Provider_PracticeGUID')),
+                        clean_int(row.get('Provider_ID')),
+                        clean_str(row.get('Provider_TaxonomyCode'))
+                    ))
                     seen_prov.add(prov_guid)
                     
                 loc_guid = row.get('ServiceLocationGUID')
@@ -364,7 +374,13 @@ def load_practice_data(data_dir='.', practice_guid=None, practice_name=None, era
                         'city': clean_str(row.get('FacilityCity')), 
                         'state': clean_str(row.get('FacilityState'))
                     })
-                    batch_loc.append((loc_guid, clean_str(row.get('FacilityName')), addr_json))
+                    batch_loc.append((
+                        loc_guid, clean_str(row.get('FacilityName')), addr_json,
+                        clean_id(row.get('Location_PracticeGUID')),
+                        clean_str(row.get('Location_NPI')),
+                        clean_str(row.get('Location_POSCode')),
+                        clean_int(row.get('Location_ID'))
+                    ))
                     seen_loc.add(loc_guid)
                 
                 # Insurance
@@ -376,7 +392,11 @@ def load_practice_data(data_dir='.', practice_guid=None, practice_name=None, era
                     if pol_key not in seen_ins:
                         batch_ins.append((
                             pol_key, clean_str(row.get('Insurance_Company')), clean_str(row.get('Insurance_Plan')), pol_num, grp_num,
-                            clean_date(row.get('Policy_Start')), clean_date(row.get('Policy_End')), clean_money(row.get('Policy_Copay'))
+                            clean_date(row.get('Policy_Start')), clean_date(row.get('Policy_End')), clean_money(row.get('Policy_Copay')),
+                            clean_id(row.get('Policy_PracticeGUID')),
+                            clean_int(row.get('Policy_PatientCaseID')),
+                            clean_id(row.get('Policy_GUID')),
+                            clean_int(row.get('Policy_Precedence'))
                         ))
                         seen_ins.add(pol_key)
                 
@@ -390,16 +410,22 @@ def load_practice_data(data_dir='.', practice_guid=None, practice_name=None, era
                         clean_str(row.get('Appt_Notes')),   
                         clean_str(row.get('POS_Desc')),
                         pat_guid, prov_guid, loc_guid, pol_key,
-                        row.get('ReferringProvGUID')
+                        clean_id(row.get('ReferringProvGUID')),
+                        clean_id(row.get('Enc_PracticeGUID')),
+                        clean_id(row.get('Enc_ApptGUID')),
+                        clean_int(row.get('PatientCaseID')),
+                        clean_str(row.get('Enc_POSCode'))
                     ))
                     
-                    # Diagnoses
+                    # Diagnoses (with new FK columns)
                     enc_seen_diags = set()
+                    enc_guid_for_diag = row.get('Enc_EncounterGUID')
+                    enc_practice_guid_for_diag = clean_id(row.get('Enc_PracticeGUID'))
                     for i in range(1, 9):
                         d_code = clean_str(row.get(f'DiagID_{i}'))
                         d_desc = clean_str(row.get(f'DiagDesc_{i}'))
                         if d_code and d_code not in enc_seen_diags:
-                            batch_diag.append((enc_id, d_code, i, d_desc))
+                            batch_diag.append((enc_id, d_code, i, d_desc, enc_practice_guid_for_diag, enc_guid_for_diag))
                             enc_seen_diags.add(d_code)
                             
                     seen_enc.add(enc_id)
@@ -429,35 +455,59 @@ def load_practice_data(data_dir='.', practice_guid=None, practice_name=None, era
 
         # Updated to UPSERT to backfill names
         sql_pat = """
-            INSERT INTO tebra.cmn_patient (patient_guid, patient_id, full_name, case_id, dob, gender, address_line1, city, state, zip) 
-            VALUES %s 
+            INSERT INTO tebra.cmn_patient (
+                patient_guid, patient_id, full_name, case_id, dob, gender, address_line1, city, state, zip,
+                practice_guid, primary_provider_guid, default_location_guid, referring_provider_guid, active
+            ) VALUES %s 
             ON CONFLICT (patient_guid) DO UPDATE 
             SET full_name = EXCLUDED.full_name, dob = EXCLUDED.dob, gender = EXCLUDED.gender, 
-                address_line1 = EXCLUDED.address_line1, city = EXCLUDED.city, state = EXCLUDED.state, zip = EXCLUDED.zip
+                address_line1 = EXCLUDED.address_line1, city = EXCLUDED.city, state = EXCLUDED.state, zip = EXCLUDED.zip,
+                practice_guid = COALESCE(EXCLUDED.practice_guid, tebra.cmn_patient.practice_guid),
+                primary_provider_guid = COALESCE(EXCLUDED.primary_provider_guid, tebra.cmn_patient.primary_provider_guid),
+                default_location_guid = COALESCE(EXCLUDED.default_location_guid, tebra.cmn_patient.default_location_guid),
+                referring_provider_guid = COALESCE(EXCLUDED.referring_provider_guid, tebra.cmn_patient.referring_provider_guid),
+                active = COALESCE(EXCLUDED.active, tebra.cmn_patient.active)
         """
         execute_batch(cur, sql_pat, batch_pat, "Patients")
         
         sql_prov = """
-            INSERT INTO tebra.cmn_provider (provider_guid, npi, name) 
-            VALUES %s 
+            INSERT INTO tebra.cmn_provider (
+                provider_guid, npi, name,
+                practice_guid, provider_id, taxonomy_code
+            ) VALUES %s 
             ON CONFLICT (provider_guid) DO UPDATE 
-            SET npi = EXCLUDED.npi, name = EXCLUDED.name
+            SET npi = EXCLUDED.npi, name = EXCLUDED.name,
+                practice_guid = COALESCE(EXCLUDED.practice_guid, tebra.cmn_provider.practice_guid),
+                provider_id = COALESCE(EXCLUDED.provider_id, tebra.cmn_provider.provider_id),
+                taxonomy_code = COALESCE(EXCLUDED.taxonomy_code, tebra.cmn_provider.taxonomy_code)
         """
         execute_batch(cur, sql_prov, batch_prov, "Providers")
         
         sql_loc = """
-            INSERT INTO tebra.cmn_location (location_guid, name, address_block) 
-            VALUES %s 
+            INSERT INTO tebra.cmn_location (
+                location_guid, name, address_block,
+                practice_guid, npi, place_of_service_code, location_id
+            ) VALUES %s 
             ON CONFLICT (location_guid) DO UPDATE 
-            SET name = EXCLUDED.name, address_block = EXCLUDED.address_block
+            SET name = EXCLUDED.name, address_block = EXCLUDED.address_block,
+                practice_guid = COALESCE(EXCLUDED.practice_guid, tebra.cmn_location.practice_guid),
+                npi = COALESCE(EXCLUDED.npi, tebra.cmn_location.npi),
+                place_of_service_code = COALESCE(EXCLUDED.place_of_service_code, tebra.cmn_location.place_of_service_code),
+                location_id = COALESCE(EXCLUDED.location_id, tebra.cmn_location.location_id)
         """
         execute_batch(cur, sql_loc, batch_loc, "Locations")
         
         sql_ins = """
-            INSERT INTO tebra.ref_insurance_policy (policy_key, company_name, plan_name, policy_number, group_number, start_date, end_date, copay) 
-            VALUES %s 
+            INSERT INTO tebra.ref_insurance_policy (
+                policy_key, company_name, plan_name, policy_number, group_number, start_date, end_date, copay,
+                practice_guid, patient_case_id, policy_guid, precedence
+            ) VALUES %s 
             ON CONFLICT (policy_key) DO UPDATE
-            SET start_date = EXCLUDED.start_date, end_date = EXCLUDED.end_date, copay = EXCLUDED.copay
+            SET start_date = EXCLUDED.start_date, end_date = EXCLUDED.end_date, copay = EXCLUDED.copay,
+                practice_guid = COALESCE(EXCLUDED.practice_guid, tebra.ref_insurance_policy.practice_guid),
+                patient_case_id = COALESCE(EXCLUDED.patient_case_id, tebra.ref_insurance_policy.patient_case_id),
+                policy_guid = COALESCE(EXCLUDED.policy_guid, tebra.ref_insurance_policy.policy_guid),
+                precedence = COALESCE(EXCLUDED.precedence, tebra.ref_insurance_policy.precedence)
         """
         execute_batch(cur, sql_ins, batch_ins, "Insurance Policies")
         
@@ -474,10 +524,16 @@ def load_practice_data(data_dir='.', practice_guid=None, practice_name=None, era
             INSERT INTO tebra.clin_encounter (
                 encounter_id, encounter_guid, start_date, status, appt_type, appt_reason,
                 appt_subject, appt_notes, pos_description,
-                patient_guid, provider_guid, location_guid, insurance_policy_key, referring_provider_guid
+                patient_guid, provider_guid, location_guid, insurance_policy_key, referring_provider_guid,
+                practice_guid, appointment_guid, patient_case_id, place_of_service_code
             ) VALUES %s 
             ON CONFLICT (encounter_id) DO UPDATE
-            SET appt_subject = EXCLUDED.appt_subject, appt_notes = EXCLUDED.appt_notes, pos_description = EXCLUDED.pos_description, referring_provider_guid = EXCLUDED.referring_provider_guid
+            SET appt_subject = EXCLUDED.appt_subject, appt_notes = EXCLUDED.appt_notes, 
+                pos_description = EXCLUDED.pos_description, referring_provider_guid = EXCLUDED.referring_provider_guid,
+                practice_guid = COALESCE(EXCLUDED.practice_guid, tebra.clin_encounter.practice_guid),
+                appointment_guid = COALESCE(EXCLUDED.appointment_guid, tebra.clin_encounter.appointment_guid),
+                patient_case_id = COALESCE(EXCLUDED.patient_case_id, tebra.clin_encounter.patient_case_id),
+                place_of_service_code = COALESCE(EXCLUDED.place_of_service_code, tebra.clin_encounter.place_of_service_code)
         """
         execute_batch(cur, sql_enc, batch_enc, "Encounters")
         
@@ -489,10 +545,12 @@ def load_practice_data(data_dir='.', practice_guid=None, practice_name=None, era
              conn.rollback()
 
         sql_diag = """
-            INSERT INTO tebra.clin_encounter_diagnosis (encounter_id, diag_code, precedence, description) 
+            INSERT INTO tebra.clin_encounter_diagnosis (encounter_id, diag_code, precedence, description, practice_guid, encounter_guid) 
             VALUES %s 
             ON CONFLICT (encounter_id, diag_code) DO UPDATE 
-            SET description = EXCLUDED.description
+            SET description = EXCLUDED.description,
+                practice_guid = COALESCE(EXCLUDED.practice_guid, tebra.clin_encounter_diagnosis.practice_guid),
+                encounter_guid = COALESCE(EXCLUDED.encounter_guid, tebra.clin_encounter_diagnosis.encounter_guid)
         """
         execute_batch(cur, sql_diag, batch_diag, "Diagnoses")
         
@@ -550,9 +608,11 @@ def load_practice_data(data_dir='.', practice_guid=None, practice_name=None, era
                     row.get('Adjustment_Descriptions'),
                     row.get('Claim_Status'),
                     row.get('Payer_Status'),
-                    loc_guid,                     # Practice GUID
+                    clean_id(row.get('Claim_PracticeGUID') or row.get('Enc_PracticeGUID')),  # Practice GUID
                     row.get('Tracking_Num'),
-                    row.get('CH_Payer')
+                    row.get('CH_Payer'),
+                    clean_id(row.get('DB_PatientGUID')),
+                    clean_int(row.get('DB_EncounterProcedureID'))
                 ))
                 seen_claims.add(unique_str)
         
@@ -572,7 +632,8 @@ def load_practice_data(data_dir='.', practice_guid=None, practice_name=None, era
                 billed_amount, paid_amount, units,
                 adjustments_json, adjustment_descriptions,
                 claim_status, payer_status, practice_guid,
-                tracking_number, clearinghouse_payer
+                tracking_number, clearinghouse_payer,
+                patient_guid, encounter_procedure_id
             ) VALUES %s
             ON CONFLICT (tebra_claim_id) DO UPDATE
             SET encounter_id = EXCLUDED.encounter_id,
@@ -581,7 +642,9 @@ def load_practice_data(data_dir='.', practice_guid=None, practice_name=None, era
                 adjustments_json = EXCLUDED.adjustments_json,
                 adjustment_descriptions = EXCLUDED.adjustment_descriptions,
                 claim_status = EXCLUDED.claim_status,
-                payer_status = EXCLUDED.payer_status
+                payer_status = EXCLUDED.payer_status,
+                patient_guid = COALESCE(EXCLUDED.patient_guid, tebra.fin_claim_line.patient_guid),
+                encounter_procedure_id = COALESCE(EXCLUDED.encounter_procedure_id, tebra.fin_claim_line.encounter_procedure_id)
         """
         execute_batch(cur, sql_claim, batch_claims, "Claim Lines")
         print(f"    -> Loaded {len(batch_claims)} claim lines with encounter linkage.")

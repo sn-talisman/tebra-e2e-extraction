@@ -232,10 +232,10 @@ export const analyticsService = {
     getGlobalCptPerformance: async (daysBack = 90) => {
         try {
             const response = await fetchWithTimeout(`${ANALYTICS_BASE_URL}/global/cpt-performance?days_back=${daysBack}`);
-            if (!response.ok) throw new Error('Failed to fetch global CPTs');
+            if (!response.ok) throw new Error('Failed to fetch global CPT performance');
             return response.json();
         } catch (error) {
-            console.error("Error fetching global CPTs:", error);
+            console.error("Error fetching global CPT performance:", error);
             return [];
         }
     },

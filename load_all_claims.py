@@ -85,7 +85,10 @@ def load_all_service_lines():
                     clean_money(row.get('Paid')),
                     int(float(row.get('Units') or 1)),
                     row.get('Adjustments'),
-                    row.get('Status', '1')  # Default status
+                    row.get('Status', '1'),  # Default status
+                    row.get('PracticeGUID') or None,
+                    row.get('PatientGUID') or None,
+                    int(row.get('EncounterProcedureID')) if row.get('EncounterProcedureID') else None
                 ))
             
             if batch:
@@ -98,11 +101,15 @@ def load_all_service_lines():
                         INSERT INTO tebra.fin_claim_line (
                             tebra_claim_id, encounter_id, claim_reference_id,
                             proc_code, date_of_service, billed_amount, paid_amount, units,
-                            adjustments_json, claim_status
+                            adjustments_json, claim_status,
+                            practice_guid, patient_guid, encounter_procedure_id
                         ) VALUES %s
                         ON CONFLICT (tebra_claim_id) DO UPDATE
                         SET paid_amount = EXCLUDED.paid_amount,
-                            adjustments_json = EXCLUDED.adjustments_json
+                            adjustments_json = EXCLUDED.adjustments_json,
+                            practice_guid = COALESCE(EXCLUDED.practice_guid, tebra.fin_claim_line.practice_guid),
+                            patient_guid = COALESCE(EXCLUDED.patient_guid, tebra.fin_claim_line.patient_guid),
+                            encounter_procedure_id = COALESCE(EXCLUDED.encounter_procedure_id, tebra.fin_claim_line.encounter_procedure_id)
                         """,
                         batch,
                         page_size=500

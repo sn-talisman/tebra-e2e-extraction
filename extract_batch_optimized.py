@@ -54,7 +54,8 @@ def extract_batch(input_dir='.', output_dir='.'):
         
         q_claims = """
             SELECT CLAIMID, ENCOUNTERPROCEDUREID, PATIENTGUID, 
-                   STATUSNAME, PAYERPROCESSINGSTATUSTYPEDESC, CLEARINGHOUSEPAYER, CLEARINGHOUSETRACKINGNUMBER
+                   STATUSNAME, PAYERPROCESSINGSTATUSTYPEDESC, CLEARINGHOUSEPAYER, CLEARINGHOUSETRACKINGNUMBER,
+                   PRACTICEGUID
             FROM PM_CLAIM 
             WHERE CLAIMID IN ({id_list_str})
         """.format(id_list_str=id_list_str)
@@ -86,6 +87,7 @@ def extract_batch(input_dir='.', output_dir='.'):
         enrichment_map[cid]['Payer_Status'] = r[4]
         enrichment_map[cid]['CH_Payer'] = r[5]
         enrichment_map[cid]['Tracking_Num'] = r[6]
+        enrichment_map[cid]['Claim_PracticeGUID'] = r[7]
         
         enrichment_map[cid]['LinkStatus'] = 'Claim Found'
         
@@ -267,7 +269,7 @@ def extract_batch(input_dir='.', output_dir='.'):
                ENCOUNTERGUID, ENCOUNTERID, DATEOFSERVICE, ENCOUNTERSTATUSDESCRIPTION,
                APPOINTMENTGUID, PROVIDERGUID, SERVICELOCATIONGUID,
                INSURANCEPOLICYAUTHORIZATIONID, PATIENTCASEID, PLACEOFSERVICECODE,
-               REFERRINGPHYSICIANGUID
+               REFERRINGPHYSICIANGUID, PRACTICEGUID, PATIENTGUID
             FROM PM_ENCOUNTER
             WHERE ENCOUNTERGUID IN ({enc_list_str})
         """
@@ -291,6 +293,8 @@ def extract_batch(input_dir='.', output_dir='.'):
                 'PatientCaseID': r[8],
                 'Enc_POSCode': r[9],
                 'ReferringProvGUID': r[10],
+                'Enc_PracticeGUID': r[11],
+                'Enc_PatientGUID': r[12],
                 'LinkStatus': 'Success'
             }
             if r[7]: ins_auth_ids.add(r[7])
@@ -345,8 +349,11 @@ def extract_batch(input_dir='.', output_dir='.'):
     # 4a. Resolve Patients
     if pat_guids:
         ids = ", ".join([f"'{d}'" for d in pat_guids])
-        # PM_PATIENT: PATIENTGUID, PATIENTID, FIRSTNAME, LASTNAME, DOB, GENDER, ADDRESSLINE1, CITY, STATE, ZIPCODE
-        cursor.execute(f"SELECT PATIENTGUID, PATIENTID, FIRSTNAME, LASTNAME, DOB, GENDER, ADDRESSLINE1, CITY, STATE, ZIPCODE FROM PM_PATIENT WHERE PATIENTGUID IN ({ids})")
+        # PM_PATIENT: PATIENTGUID, PATIENTID, FIRSTNAME, LASTNAME, DOB, GENDER, ADDRESSLINE1, CITY, STATE, ZIPCODE,
+        #             PRACTICEGUID, PRIMARYPROVIDERGUID, DEFAULTSERVICELOCATIONGUID, REFERRINGPHYSICIANGUID, ACTIVE
+        cursor.execute(f"""SELECT PATIENTGUID, PATIENTID, FIRSTNAME, LASTNAME, DOB, GENDER, ADDRESSLINE1, CITY, STATE, ZIPCODE,
+                                  PRACTICEGUID, PRIMARYPROVIDERGUID, DEFAULTSERVICELOCATIONGUID, REFERRINGPHYSICIANGUID, ACTIVE
+                           FROM PM_PATIENT WHERE PATIENTGUID IN ({ids})""")
         pat_lookup = {}
         for r in cursor.fetchall():
             pat_lookup[r[0]] = {
@@ -357,7 +364,12 @@ def extract_batch(input_dir='.', output_dir='.'):
                 'PatientAddress': r[6],
                 'PatientCity': r[7],
                 'PatientState': r[8],
-                'PatientZip': r[9]
+                'PatientZip': r[9],
+                'Patient_PracticeGUID': r[10],
+                'Patient_PrimaryProvGUID': r[11],
+                'Patient_DefaultLocGUID': r[12],
+                'Patient_ReferringProvGUID': r[13],
+                'Patient_Active': r[14]
             }
         # Distribute
         for lid, data in enrichment_map.items():
@@ -368,13 +380,17 @@ def extract_batch(input_dir='.', output_dir='.'):
     # 4b. Resolve Providers
     if prov_guids:
         ids = ", ".join([f"'{d}'" for d in prov_guids])
-        # PM_DOCTOR: DOCTORGUID, NPI, FIRSTNAME, LASTNAME
-        cursor.execute(f"SELECT DOCTORGUID, NPI, FIRSTNAME, LASTNAME FROM PM_DOCTOR WHERE DOCTORGUID IN ({ids})")
+        # PM_DOCTOR: DOCTORGUID, NPI, FIRSTNAME, LASTNAME, PRACTICEGUID, DOCTORID, TAXONOMYCODE
+        cursor.execute(f"""SELECT DOCTORGUID, NPI, FIRSTNAME, LASTNAME, PRACTICEGUID, DOCTORID, TAXONOMYCODE
+                           FROM PM_DOCTOR WHERE DOCTORGUID IN ({ids})""")
         prov_lookup = {}
         for r in cursor.fetchall():
             prov_lookup[r[0]] = {
                 'ProviderNPI': r[1],
-                'ProviderName': f"{r[2] or ''} {r[3] or ''}".strip()
+                'ProviderName': f"{r[2] or ''} {r[3] or ''}".strip(),
+                'Provider_PracticeGUID': r[4],
+                'Provider_ID': r[5],
+                'Provider_TaxonomyCode': r[6]
             }
         for lid, data in enrichment_map.items():
             pg = data.get('ProviderGUID')
@@ -390,15 +406,21 @@ def extract_batch(input_dir='.', output_dir='.'):
     # 4c. Resolve Locations
     if loc_guids:
         ids = ", ".join([f"'{d}'" for d in loc_guids])
-        # PM_SERVICELOCATION: SERVICELOCATIONGUID, NAME, ADDRESSLINE1, CITY, STATE
-        cursor.execute(f"SELECT SERVICELOCATIONGUID, NAME, ADDRESSLINE1, CITY, STATE FROM PM_SERVICELOCATION WHERE SERVICELOCATIONGUID IN ({ids})")
+        # PM_SERVICELOCATION: SERVICELOCATIONGUID, NAME, ADDRESSLINE1, CITY, STATE, PRACTICEGUID, NPI, PLACEOFSERVICECODE, SERVICELOCATIONID
+        cursor.execute(f"""SELECT SERVICELOCATIONGUID, NAME, ADDRESSLINE1, CITY, STATE,
+                                  PRACTICEGUID, NPI, PLACEOFSERVICECODE, SERVICELOCATIONID
+                           FROM PM_SERVICELOCATION WHERE SERVICELOCATIONGUID IN ({ids})""")
         loc_lookup = {}
         for r in cursor.fetchall():
              loc_lookup[r[0]] = {
                  'FacilityName': r[1],
                  'FacilityAddress': r[2],
                  'FacilityCity': r[3],
-                 'FacilityState': r[4]
+                 'FacilityState': r[4],
+                 'Location_PracticeGUID': r[5],
+                 'Location_NPI': r[6],
+                 'Location_POSCode': r[7],
+                 'Location_ID': r[8]
              }
         for lid, data in enrichment_map.items():
              lg = data.get('ServiceLocationGUID')
@@ -448,7 +470,8 @@ def extract_batch(input_dir='.', output_dir='.'):
         ids = ", ".join([f"'{d}'" for d in policy_guids])
         q_pol = f"""
             SELECT P.INSURANCEPOLICYGUID, P.POLICYNUMBER, P.GROUPNUMBER, PL.PLANNAME, C.INSURANCECOMPANYNAME,
-                   P.POLICYSTARTDATE, P.POLICYENDDATE, P.COPAY
+                   P.POLICYSTARTDATE, P.POLICYENDDATE, P.COPAY,
+                   P.PRACTICEGUID, P.PATIENTCASEID, P.PRECEDENCE
             FROM PM_INSURANCEPOLICY P
             LEFT JOIN PM_INSURANCECOMPANYPLAN PL ON P.INSURANCECOMPANYPLANGUID = PL.INSURANCECOMPANYPLANGUID
             LEFT JOIN PM_INSURANCECOMPANY C ON PL.INSURANCECOMPANYID = C.INSURANCECOMPANYID
@@ -465,7 +488,11 @@ def extract_batch(input_dir='.', output_dir='.'):
                 'Insurance_Company': r[4],
                 'Policy_Start': str(r[5])[:10] if r[5] else None,
                 'Policy_End': str(r[6])[:10] if r[6] else None,
-                'Policy_Copay': r[7]
+                'Policy_Copay': r[7],
+                'Policy_PracticeGUID': r[8],
+                'Policy_PatientCaseID': r[9],
+                'Policy_Precedence': r[10],
+                'Policy_GUID': r[0]  # Snowflake native GUID
             }
             
         for lid, data in enrichment_map.items():

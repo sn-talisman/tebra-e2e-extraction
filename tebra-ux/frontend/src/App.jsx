@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard'
 import Practices from './pages/Practices'
 import ElectronicRemittance from './pages/ElectronicRemittance'
 import Financial from './pages/Financial'
+import Analytics from './pages/Analytics'
 
 function App() {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -28,6 +29,7 @@ function App() {
                             <Route path="/practices" element={<Practices />} />
                             <Route path="/eras" element={<ElectronicRemittance />} />
                             <Route path="/financial" element={<Financial />} />
+                            <Route path="/analytics" element={<Analytics />} />
                         </Routes>
                     </div>
                 </div>

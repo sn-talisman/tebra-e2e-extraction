@@ -54,12 +54,12 @@ const ExecutiveSummary = ({ practices }) => {
         }
     };
 
-    // Chart Data Preparation ---------------------------
-
     const safeNumber = (val) => {
         const num = Number(val);
         return isNaN(num) ? 0 : num;
     };
+
+    // Chart Data Preparation ---------------------------
 
     // 1. Practice Performance (Bar Chart)
     const practiceData = Array.isArray(practices) ? practices

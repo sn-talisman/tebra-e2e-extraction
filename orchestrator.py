@@ -8,12 +8,15 @@ from extract_batch_optimized import extract_batch
 from load_to_postgres import load_practice_data
 
 # Setup Logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('Orchestrator')
 
 import csv
 import time
+import sys
+import argparse
 from datetime import datetime
+from load_to_postgres import DB_CONFIG
+import psycopg2
 
 # ... imports ...
 
@@ -113,8 +116,37 @@ def generate_report(stats_list):
 
     logger.info(f"Report generated: {os.path.abspath(REPORT_FILE)}")
 
-def run_pipeline():
+def reset_db():
+    """Truncate all tables to ensure a clean state."""
+    logger.info("--- TRUNCATING DATABASE TABLES (10 TABLES) ---")
+    conn = psycopg2.connect(**DB_CONFIG)
+    cur = conn.cursor()
+    tables = [
+        'tebra.fin_claim_line', 'tebra.clin_encounter_diagnosis', 'tebra.clin_encounter',
+        'tebra.fin_era_bundle', 'tebra.fin_era_report', 'tebra.ref_insurance_policy',
+        'tebra.cmn_location', 'tebra.cmn_provider', 'tebra.cmn_patient', 'tebra.cmn_practice'
+    ]
+    try:
+        cur.execute("TRUNCATE TABLE " + ", ".join(tables) + " CASCADE;")
+        conn.commit()
+        logger.info("Tables truncated successfully.")
+    except Exception as e:
+        logger.error(f"Error truncating tables: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+
+def run_pipeline(reset=False, practice_filter=None):
+    if reset:
+        reset_db()
+        
     practices = get_practices()
+    if practice_filter:
+        practices = [p for p in practices if p[0] == practice_filter]
+        if not practices:
+            logger.error(f"Practice GUID {practice_filter} not found in Snowflake list.")
+            return
+
     total_practices = len(practices)
     logger.info(f"Found {total_practices} practices to process.")
     
@@ -205,4 +237,12 @@ def run_pipeline():
     generate_report(stats_list)
 
 if __name__ == "__main__":
-    run_pipeline()
+    parser = argparse.ArgumentParser(description='Tebra E2E Data Orchestrator')
+    parser.add_argument('--reset', action='store_true', help='Truncate all tables before starting')
+    parser.add_argument('--practice', type=str, help='Run only for this specific practice GUID')
+    args = parser.parse_args()
+    
+    # Simple logging setup
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    
+    run_pipeline(reset=args.reset, practice_filter=args.practice)

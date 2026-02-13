@@ -10,8 +10,8 @@ def reset_db():
     cur = conn.cursor()
     tables = [
         'tebra.fin_claim_line', 'tebra.clin_encounter_diagnosis', 'tebra.clin_encounter',
-        'tebra.ref_insurance_policy', 'tebra.cmn_location', 'tebra.cmn_provider', 'tebra.cmn_patient',
-        'tebra.fin_era_bundle'
+        'tebra.fin_era_bundle', 'tebra.fin_era_report', 'tebra.ref_insurance_policy',
+        'tebra.cmn_location', 'tebra.cmn_provider', 'tebra.cmn_patient', 'tebra.cmn_practice'
     ]
     try:
         cur.execute("TRUNCATE TABLE " + ", ".join(tables) + " CASCADE;")
@@ -37,14 +37,27 @@ def run_pipeline():
         p_dir = os.path.join(base_dir, p)
         print(f"\n[{i+1}/{len(practices)}] Processing: {p}...")
         
+        # Parse Practice Name and GUID from directory name (Format: NAME_GUID)
+        try:
+            parts = p.rsplit('_', 1)
+            if len(parts) == 2:
+                p_name = parts[0].replace('_', ' ')
+                p_guid = parts[1]
+            else:
+                p_name = p
+                p_guid = None
+        except:
+            p_name = p
+            p_guid = None
+            
         try:
             # Step A: Extract
-            print("  -> Extracting...")
+            print(f"  -> Extracting {p_name}...")
             extract_batch(p_dir, p_dir)
             
             # Step B: Load
-            print("  -> Loading...")
-            load_practice_data(p_dir)
+            print(f"  -> Loading {p_name}...")
+            load_practice_data(p_dir, practice_guid=p_guid, practice_name=p_name)
             
         except Exception as e:
             print(f"!!! Error processing {p}: {e}")

@@ -209,6 +209,7 @@ def get_global_performance_summary(days_back: int = 90):
             "high_risk_pct": (high_risk / total) if total > 0 else 0
         }
 
+
 @router.get("/global/payer-performance")
 def get_global_payer_performance(days_back: int = 90):
     with get_db_cursor() as cur:
