@@ -66,7 +66,9 @@ const ElectronicRemittance = () => {
 
             if (selectedPractice) {
                 // The backend expects GUID for 'All' check or specific GUID
-                url += `practice_guid=${selectedPractice.locationGuid}&`
+                // Backend refactor uses 'practice_guid' column, but frontend object might have 'locationGuid' or 'practiceGuid'
+                const guid = selectedPractice.practiceGuid || selectedPractice.locationGuid
+                url += `practice_guid=${guid}&`
             }
 
             // Filters

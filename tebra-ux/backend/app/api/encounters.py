@@ -109,14 +109,14 @@ def get_encounter_details(encounter_id: int):
         # If no claims found by encounter_id, try to get claims for this practice 
         # that match the encounter date (best effort)
         if not lines:
-            # Get encounter location_guid
+            # Get encounter practice_guid
             cur.execute("""
-                SELECT location_guid, start_date 
+                SELECT practice_guid, start_date 
                 FROM tebra.clin_encounter 
                 WHERE encounter_id = %s
             """, (encounter_id,))
             enc_info = cur.fetchone()
-            if enc_info and enc_info['location_guid']:
+            if enc_info and enc_info['practice_guid']:
                 # Get claims for this practice matching the encounter date
                 cur.execute("""
                     SELECT 
@@ -134,7 +134,7 @@ def get_encounter_details(encounter_id: int):
                       AND cl.date_of_service = %s
                     ORDER BY cl.date_of_service ASC
                     LIMIT 20
-                """, (str(enc_info['location_guid']), enc_info['start_date']))
+                """, (enc_info['practice_guid'], enc_info['start_date']))
                 lines = cur.fetchall()
 
         # 5. ERA Payment Bundles

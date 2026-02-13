@@ -23,7 +23,7 @@ async def get_era_reports(
     """
     with get_db_cursor() as cur:
         # Base Query
-        # Join fin_era_report -> cmn_location via practice_guid (Direct Link)
+        # Join fin_era_report -> cmn_practice via practice_guid (Direct Link)
         # Join fin_era_report -> fin_era_bundle -> fin_claim_line (For counts)
         
         offset = (page - 1) * page_size
@@ -54,7 +54,7 @@ async def get_era_reports(
                 ) as total_billed,
                 
                 -- Practice Name
-                COALESCE(loc.name, 'Unknown Practice') as practice_name,
+                COALESCE(p.name, 'Unknown Practice') as practice_name,
                 
                 -- Source Metrics (Use Line Count if Source is 0 or less than calculated)
                 GREATEST(
@@ -101,7 +101,7 @@ async def get_era_reports(
                 END as era_type
                 
             FROM tebra.fin_era_report r
-            LEFT JOIN tebra.cmn_practice loc ON r.practice_guid::uuid = loc.practice_guid
+            LEFT JOIN tebra.cmn_practice p ON r.practice_guid = p.practice_guid
             LEFT JOIN tebra.fin_era_bundle b ON r.era_report_id = b.era_report_id
             LEFT JOIN tebra.fin_claim_line cl ON b.claim_reference_id = cl.claim_reference_id
         """
@@ -110,7 +110,7 @@ async def get_era_reports(
         where_clauses = []
         
         if practice_guid and practice_guid != 'All':
-            where_clauses.append("r.practice_guid::uuid = %s")
+            where_clauses.append("r.practice_guid = %s")
             params.append(practice_guid)
             
         if where_clauses:
@@ -137,7 +137,7 @@ async def get_era_reports(
             params.extend([search_pattern, search_pattern, search_pattern, search_pattern])
         
         sql += """
-            GROUP BY r.era_report_id, r.received_date, r.payer_name, r.check_number, r.total_paid, r.payment_method, loc.name
+            GROUP BY r.era_report_id, r.received_date, r.payer_name, r.check_number, r.total_paid, r.payment_method, p.name
         """
 
         # HAVING Filters (Aggregated Counts / Calculated Types)
@@ -249,10 +249,10 @@ async def get_era_details(report_id: str):
                     0
                 ) as total_paid,
                 r.payment_method,
-                COALESCE(loc.name, 'Unknown Practice') as practice_name,
+                COALESCE(p.name, 'Unknown Practice') as practice_name,
                 r.claim_count_source
             FROM tebra.fin_era_report r
-            LEFT JOIN tebra.cmn_practice loc ON r.practice_guid::uuid = loc.practice_guid
+            LEFT JOIN tebra.cmn_practice p ON r.practice_guid = p.practice_guid
             WHERE r.era_report_id = %s
         """, (report_id,))
         header = cur.fetchone()

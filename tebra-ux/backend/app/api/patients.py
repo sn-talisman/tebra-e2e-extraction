@@ -72,7 +72,7 @@ async def get_patient_details(patient_guid: str):
                 e.encounter_id,
                 e.start_date,
                 e.status,
-                l.name as location_name,
+                COALESCE(l.name, 'Unknown Location') as location_name,
                 COALESCE(SUM(cl.billed_amount), 0) as total_billed,
                 COALESCE(SUM(cl.paid_amount), 0) as total_paid
             FROM tebra.clin_encounter e
@@ -108,7 +108,7 @@ async def get_patient_details(patient_guid: str):
                 "encounterId": encounter_id,
                 "date": str(row[1]) if row[1] else "N/A",
                 "status": row[2] or "N/A",
-                "location": row[3] or "N/A",
+                "location": row[3],
                 "diagnoses": diagnoses,
                 "totalBilled": float(row[4] or 0),
                 "totalPaid": float(row[5] or 0)

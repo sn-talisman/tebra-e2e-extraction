@@ -125,3 +125,119 @@ def get_claim_details(claim_ref_id: str):
     finally:
         cur.close()
         conn.close()
+
+@router.get("/list")
+def get_all_claims(
+    page: int = 1,
+    page_size: int = 20,
+    search: str = None,
+    sort_by: str = 'date', # date, patient, practice, status, amount
+    order: str = 'desc'
+):
+    """
+    Get paginated list of all claims across all practices
+    """
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    
+    try:
+        offset = (page - 1) * page_size
+        
+        # Base Query
+        # Grouping by Claim Reference ID to roll up lines into a single "Claim" for the list view
+        # Using MAX/SUM for aggregates
+        sql = """
+            SELECT 
+                cl.claim_reference_id as claim_id,
+                MAX(cl.date_of_service) as date,
+                MAX(p.full_name) as patient_name,
+                MAX(pr.name) as practice_name,
+                SUM(cl.billed_amount) as total_billed,
+                SUM(cl.paid_amount) as total_paid,
+                
+                -- Determine Status priority: Paid > Rejected > Denied > Pending
+                CASE 
+                    WHEN SUM(cl.paid_amount) > 0 THEN 'Paid'
+                    WHEN MAX(cl.payer_status) ILIKE '%%Rejected%%' OR MAX(cl.claim_status) ILIKE '%%Rejected%%' THEN 'Rejected'
+                    WHEN MAX(cl.payer_status) ILIKE '%%Denied%%' OR MAX(cl.claim_status) ILIKE '%%Denied%%' THEN 'Denied'
+                    ELSE COALESCE(MAX(cl.payer_status), MAX(cl.claim_status), 'Pending')
+                END as status
+                
+            FROM tebra.fin_claim_line cl
+            LEFT JOIN tebra.cmn_patient p ON cl.patient_guid = p.patient_guid
+            LEFT JOIN tebra.cmn_practice pr ON cl.practice_guid = pr.practice_guid
+        """
+        
+        params = []
+        where_clauses = []
+        
+        if search:
+            search_pattern = f"%{search}%"
+            where_clauses.append("""
+                (cl.claim_reference_id ILIKE %s OR 
+                 p.full_name ILIKE %s OR 
+                 pr.name ILIKE %s OR
+                 cl.payer_status ILIKE %s)
+            """)
+            params.extend([search_pattern, search_pattern, search_pattern, search_pattern])
+            
+        if where_clauses:
+            sql += " WHERE " + " AND ".join(where_clauses)
+            
+        sql += " GROUP BY cl.claim_reference_id "
+        
+        # Sorting
+        sort_map = {
+            'date': 'MAX(cl.date_of_service)',
+            'patient': 'MAX(p.full_name)',
+            'practice': 'MAX(pr.name)',
+            'amount': 'SUM(cl.billed_amount)',
+            'status': '7' # Sort by the calculated column index (Postgres specific shorthand, or repeat expression)
+        }
+        
+        # Careful with calculated column sorting in GROUP BY
+        # Repeating the expression is safer
+        if sort_by == 'status':
+            order_expr = """
+                CASE 
+                    WHEN SUM(cl.paid_amount) > 0 THEN 'Paid'
+                    WHEN MAX(cl.payer_status) ILIKE '%%Rejected%%' OR MAX(cl.claim_status) ILIKE '%%Rejected%%' THEN 'Rejected'
+                    WHEN MAX(cl.payer_status) ILIKE '%%Denied%%' OR MAX(cl.claim_status) ILIKE '%%Denied%%' THEN 'Denied'
+                    ELSE COALESCE(MAX(cl.payer_status), MAX(cl.claim_status), 'Pending')
+                END
+            """
+        else:
+            order_expr = sort_map.get(sort_by, 'MAX(cl.date_of_service)')
+            
+        direction = "DESC" if order == 'desc' else "ASC"
+        
+        sql += f" ORDER BY {order_expr} {direction}"
+        
+        # Pagination
+        sql += " LIMIT %s OFFSET %s"
+        params.extend([page_size, offset])
+        
+        cur.execute(sql, tuple(params))
+        rows = cur.fetchall()
+        
+        # Format response
+        result = []
+        for row in rows:
+            result.append({
+                "claimId": row['claim_id'],
+                "date": str(row['date']),
+                "patientName": row['patient_name'] or "Unknown",
+                "practiceName": row['practice_name'] or "Unknown",
+                "billed": float(row['total_billed'] or 0),
+                "paid": float(row['total_paid'] or 0),
+                "status": row['status']
+            })
+            
+        return result
+
+    except Exception as e:
+        print(f"Error fetching claims list: {e}")
+        return []
+    finally:
+        cur.close()
+        conn.close()

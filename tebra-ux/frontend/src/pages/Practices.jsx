@@ -95,15 +95,18 @@ function Practices() {
 
         try {
             if (activeTab === 'patients') {
-                const response = await fetch(`/api/practices/${selectedPractice.locationGuid}/patients`)
+                const guid = selectedPractice.practiceGuid || selectedPractice.locationGuid
+                const response = await fetch(`/api/practices/${guid}/patients`)
                 const data = await response.json()
                 setPatients(data)
             } else if (activeTab === 'encounters') {
-                const response = await fetch(`/api/practices/${selectedPractice.locationGuid}/encounters`)
+                const guid = selectedPractice.practiceGuid || selectedPractice.locationGuid
+                const response = await fetch(`/api/practices/${guid}/encounters`)
                 const data = await response.json()
                 setEncounters(data)
             } else if (activeTab === 'claims') {
-                const url = `/api/practices/${selectedPractice.locationGuid}/claims${showPaidOnly ? '?paid_only=true' : ''}`
+                const guid = selectedPractice.practiceGuid || selectedPractice.locationGuid
+                const url = `/api/practices/${guid}/claims${showPaidOnly ? '?paid_only=true' : ''}`
                 const response = await fetch(url)
                 const data = await response.json()
                 setClaims(data)
