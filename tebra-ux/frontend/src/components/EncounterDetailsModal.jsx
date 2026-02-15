@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { API_BASE_URL } from '../config';
 
 const EncounterDetailsModal = ({ isOpen, onClose, encounterId }) => {
     const [details, setDetails] = useState(null);
@@ -17,7 +18,7 @@ const EncounterDetailsModal = ({ isOpen, onClose, encounterId }) => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch(`http://localhost:8000/api/encounters/${encounterId}/details`);
+            const response = await fetch(`${API_BASE_URL}/api/encounters/${encounterId}/details`);
             if (!response.ok) {
                 throw new Error('Failed to fetch encounter details');
             }

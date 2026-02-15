@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import '../index.css'
 import { getAdjustmentDesc } from '../utils/carc_codes'
+import { API_BASE_URL } from '../config'
 
 const ERADetailsModal = ({ eraId, onClose }) => {
     const [details, setDetails] = useState(null)
@@ -14,7 +15,7 @@ const ERADetailsModal = ({ eraId, onClose }) => {
     const fetchDetails = async () => {
         setLoading(true)
         try {
-            const res = await fetch(`http://localhost:8000/api/eras/${eraId}/details`)
+            const res = await fetch(`${API_BASE_URL}/api/eras/${eraId}/details`)
             const data = await res.json()
             setDetails(data)
         } catch (err) {
