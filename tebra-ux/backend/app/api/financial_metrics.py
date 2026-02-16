@@ -275,23 +275,101 @@ def calculate_ar_over_120(cur, loc_guids: List[str]) -> float:
     return (old_ar / total_ar) * 100
 
 def calculate_all_practices_averages(cur) -> Dict[str, float]:
-    """Calculate average metrics across all practices"""
+    """Calculate average metrics across all practices (Network Average)"""
     
-    # Return placeholder as None for now
+    # 1. Get all practice GUIDs
+    cur.execute("SELECT practice_guid FROM tebra.cmn_practice")
+    all_practice_guids = [str(row['practice_guid']) for row in cur.fetchall()]
+    
+    if not all_practice_guids:
+        return {
+            "avgDaysInAR": 0,
+            "avgNCR": 0,
+            "avgDenialRate": 0,
+            "avgPatientCollectionRate": 0,
+            "avgAROver120": 0
+        }
+
+    # 2. Get all location GUIDs associated with these practices (to match how individual metrics are calculated)
+    cur.execute("SELECT DISTINCT location_guid FROM tebra.cmn_location")
+    all_loc_guids = [str(row['location_guid']) for row in cur.fetchall()]
+    
+    if not all_loc_guids:
+        return {
+            "avgDaysInAR": 0,
+            "avgNCR": 0,
+            "avgDenialRate": 0,
+            "avgPatientCollectionRate": 0,
+            "avgAROver120": 0
+        }
+
+    # Date range: last 90 days (consistent with practice metrics)
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=90)
+    
+    # Calculate global metrics
+    avg_days_in_ar = calculate_days_in_ar(cur, all_loc_guids, start_date, end_date)
+    avg_ncr = calculate_net_collection_rate(cur, all_loc_guids, start_date, end_date)
+    avg_denial = calculate_denial_rate(cur, all_loc_guids, start_date, end_date)
+    avg_ar_over_120 = calculate_ar_over_120(cur, all_loc_guids)
+    
     return {
-        "avgDaysInAR": None,
-        "avgNCR": None,
-        "avgDenialRate": None,
-        "avgPatientCollectionRate": None,
-        "avgAROver120": None
+        "avgDaysInAR": round(avg_days_in_ar, 1),
+        "avgNCR": round(avg_ncr, 1),
+        "avgDenialRate": round(avg_denial, 1),
+        "avgPatientCollectionRate": None, # Future implementation
+        "avgAROver120": round(avg_ar_over_120, 1)
     }
 
-def calculate_percentile_rank(cur, loc_guids: List[str], metrics: Dict) -> int:
-    """Calculate percentile rank among all practices"""
-    return None
+def calculate_percentile_rank(cur, loc_guids: List[str], current_metrics: Dict) -> int:
+    """Calculate percentile rank for Days in A/R among all practices"""
+    
+    # Date range: last 90 days
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=90)
+    
+    # 1. Get all practices and their names
+    cur.execute("SELECT practice_guid, name FROM tebra.cmn_practice")
+    practices = cur.fetchall()
+    
+    practice_metrics = []
+    current_value = current_metrics["daysInAR"]["value"]
+    
+    for p in practices:
+        p_guid = str(p['practice_guid'])
+        p_name = p['name']
+        
+        # Get location guids for this practice (by name match, as per our pattern)
+        cur.execute("SELECT location_guid FROM tebra.cmn_location WHERE name = %s", (p_name,))
+        p_loc_rows = cur.fetchall()
+        p_loc_guids = [str(row['location_guid']) for row in p_loc_rows]
+        
+        if not p_loc_guids:
+            p_loc_guids = [p_guid]
+            
+        val = calculate_days_in_ar(cur, p_loc_guids, start_date, end_date)
+        if val > 0:
+            practice_metrics.append(val)
+            
+    if not practice_metrics:
+        return 50 # Neutral default
+        
+    # Days in AR: Lower is better, so we rank descending (better performance = lower value)
+    # We want to know what % of practices have a WORSE (higher) Days in AR than us.
+    practice_metrics.sort() # [low, ..., high]
+    
+    # Count how many practices have a HIGHER Days in AR than us (meaning they are worse)
+    worse_than_us = [v for v in practice_metrics if v > current_value]
+    
+    rank = (len(worse_than_us) / len(practice_metrics)) * 100
+    return int(rank)
 
 def calculate_historical_trends(cur, loc_guids: List[str]) -> List[Dict]:
     """Calculate monthly trends for the last 6 months"""
+    
+    # Get all network location GUIDs for benchmarking
+    cur.execute("SELECT DISTINCT location_guid FROM tebra.cmn_location")
+    all_loc_guids = [str(row['location_guid']) for row in cur.fetchall()]
     
     trends = []
     for i in range(5, -1, -1):
@@ -302,11 +380,16 @@ def calculate_historical_trends(cur, loc_guids: List[str]) -> List[Dict]:
         ncr = calculate_net_collection_rate(cur, loc_guids, month_start, month_end)
         denial_rate = calculate_denial_rate(cur, loc_guids, month_start, month_end)
         
+        # Benchmarks
+        network_ncr = calculate_net_collection_rate(cur, all_loc_guids, month_start, month_end)
+        
         trends.append({
             "month": month_end.strftime("%Y-%m"),
             "daysInAR": round(days_in_ar, 1),
             "ncr": round(ncr, 1),
-            "denialRate": round(denial_rate, 1)
+            "denialRate": round(denial_rate, 1),
+            "networkAvgNCR": round(network_ncr, 1),
+            "industryAvgNCR": 96.0
         })
     
     return trends

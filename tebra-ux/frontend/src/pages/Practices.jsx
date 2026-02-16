@@ -643,7 +643,7 @@ function Practices() {
                                         <div style={{ background: 'white', borderRadius: '12px', padding: '24px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', border: '1px solid var(--slate-200)' }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                                                 <h3 style={{ fontSize: '16px', fontWeight: '600', color: 'var(--slate-800)', margin: 0 }}>6-Month Financial Trend</h3>
-                                                <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
+                                                <div style={{ display: 'flex', gap: '16px', fontSize: '11px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                         <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#3b82f6' }}></div>
                                                         <span style={{ color: 'var(--slate-600)' }}>Days in A/R</span>
@@ -651,6 +651,14 @@ function Practices() {
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                         <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e' }}></div>
                                                         <span style={{ color: 'var(--slate-600)' }}>Net Collection Rate</span>
+                                                    </div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                        <div style={{ width: '12px', height: '0', borderTop: '2px dashed #94a3b8' }}></div>
+                                                        <span style={{ color: 'var(--slate-600)' }}>Network Avg</span>
+                                                    </div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                        <div style={{ width: '12px', height: '0', borderTop: '2px dashed #ef4444' }}></div>
+                                                        <span style={{ color: 'var(--slate-600)' }}>Industry Avg (96%)</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -708,6 +716,28 @@ function Practices() {
                                                             strokeWidth={2}
                                                             dot={{ r: 3, fill: '#22c55e', strokeWidth: 0 }}
                                                             activeDot={{ r: 5 }}
+                                                        />
+                                                        <Line
+                                                            yAxisId="right"
+                                                            type="monotone"
+                                                            dataKey="networkAvgNCR"
+                                                            name="Network Average"
+                                                            stroke="#94a3b8"
+                                                            strokeWidth={2}
+                                                            strokeDasharray="5 5"
+                                                            dot={false}
+                                                            activeDot={false}
+                                                        />
+                                                        <Line
+                                                            yAxisId="right"
+                                                            type="monotone"
+                                                            dataKey="industryAvgNCR"
+                                                            name="Industry Average"
+                                                            stroke="#ef4444"
+                                                            strokeWidth={2}
+                                                            strokeDasharray="5 5"
+                                                            dot={false}
+                                                            activeDot={false}
                                                         />
                                                         <Line
                                                             yAxisId="left"
