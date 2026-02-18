@@ -22,3 +22,13 @@ output_all_practices/
 # IDEs
 .vscode/
 .idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Data Pipeline artifacts
+data-pipeline/data/*.csv
+data-pipeline/data/*.json
+data-pipeline/data/*.jsonl
+data-pipeline/data/backfill/
